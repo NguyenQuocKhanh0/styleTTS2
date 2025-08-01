@@ -40,7 +40,7 @@ logger.addHandler(handler)
 @click.command()
 @click.option('-p', '--config_path', default='Configs/config.yaml', type=str)
 def main(config_path):
-    config = yaml.safe_load(open(config_path))
+    config = yaml.safe_load(open(config_path, "r", encoding="utf-8"))
     
     log_dir = config['log_dir']
     if not os.path.exists(log_dir): os.makedirs(log_dir, exist_ok=True)
@@ -53,9 +53,8 @@ def main(config_path):
     file_handler.setFormatter(logging.Formatter('%(levelname)s:%(asctime)s: %(message)s'))
     logger.addHandler(file_handler)
 
-    
     batch_size = config.get('batch_size', 10)
-
+    debug = config.get('debug', True)
     epochs = config.get('epochs', 200)
     save_freq = config.get('save_freq', 2)
     log_interval = config.get('log_interval', 10)
@@ -63,39 +62,61 @@ def main(config_path):
     train_path = data_params['train_data']
     val_path = data_params['val_data']
     root_path = data_params['root_path']
-
     max_len = config.get('max_len', 200)
+
+    try:
+        symbols = (
+                        list(config['symbol']['pad']) +
+                        list(config['symbol']['punctuation']) +
+                        list(config['symbol']['letters']) +
+                        list(config['symbol']['letters_ipa']) +
+                        list(config['symbol']['extend'])
+                    )
+        symbol_dict = {}
+        for i in range(len((symbols))):
+            symbol_dict[symbols[i]] = i
+
+        n_token = len(symbol_dict) + 1
+        print("\nFound:", n_token, "symbols")
+    except Exception as e:
+        print(f"\nERROR: Cannot find {e} in config file!\nYour config file is likely outdated, please download updated version from the repository.")
+        raise SystemExit(1)
     
     loss_params = Munch(config['loss_params'])
-    
     optimizer_params = Munch(config['optimizer_params'])
     
     train_list, val_list = get_data_path_list(train_path, val_path)
     device = 'cuda'
 
+    print("\n")
+    print("Initializing train_dataloader")
     train_dataloader = build_dataloader(train_list,
                                         root_path,
+                                        symbol_dict,
                                         batch_size=batch_size,
-                                        num_workers=2,
-                                        dataset_config={},
+                                        num_workers=3,
+                                        dataset_config={"debug": debug},
                                         device=device)
 
+    print("Initializing val_dataloader")
     val_dataloader = build_dataloader(val_list,
                                       root_path,
+                                      symbol_dict,
                                       batch_size=batch_size,
                                       validation=True,
-                                      num_workers=0,
-                                      device=device,
-                                      dataset_config={})
+                                      num_workers=1,
+                                      dataset_config={"debug": debug},
+                                      device=device)
     
     # build model
     model_params = recursive_munch(config['model_params'])
+    model_params['n_token'] = n_token
     model = build_model(model_params)
     _ = [model[key].to(device) for key in model]
 
     # DP
     for key in model:
-        if key != "mpd" and key != "msd" and key != "wd":
+        if key != "mpd" and key != "msd":
             model[key] = MyDataParallel(model[key])
 
     start_epoch = 0
@@ -107,7 +128,7 @@ def main(config_path):
     dl = DiscriminatorLoss(model.mpd, model.msd).to(device)
 
     gl = MyDataParallel(gl)
-    gl = MyDataParallel(gl)
+    dl = MyDataParallel(dl)
     
     scheduler_params = {
         "max_lr": optimizer_params.lr,
@@ -134,8 +155,20 @@ def main(config_path):
         
     # load models if there is a model
     if load_pretrained:
-        model, optimizer, start_epoch, iters = load_checkpoint(model,  optimizer, config['pretrained_model'],
-                                                             load_only_params=config.get('load_only_params', True))
+        try:
+            training_strats = config['training_strats']
+        except Exception as e:
+            print("\nNo training_strats found in config. Proceeding with default settings...")
+            training_strats = {}
+            training_strats['ignore_modules'] = ''
+            training_strats['freeze_modules'] = ''
+        model, optimizer, start_epoch, iters = load_checkpoint(model,  optimizer, 
+                                                               config['pretrained_model'], 
+                                                               load_only_params=config.get('load_only_params', True),
+                                                               ignore_modules=training_strats['ignore_modules'],
+                                                               freeze_modules=training_strats['freeze_modules'])
+    else:
+        raise Exception('Must have a pretrained!')
         
     n_down = model.text_aligner.n_down
 
@@ -146,8 +179,10 @@ def main(config_path):
     
     stft_loss = MultiResolutionSTFTLoss().to(device)
     
-    print('decoder', optimizer.optimizers['decoder'])
+    print('\ndecoder', optimizer.optimizers['decoder'])
     
+############################################## TRAIN ##############################################
+
     for epoch in range(start_epoch, epochs):
         running_loss = 0
         start_time = time.time()
@@ -166,9 +201,7 @@ def main(config_path):
             texts, input_lengths, mels, mel_input_length = batch
             with torch.no_grad():
                 mask = length_to_mask(mel_input_length // (2 ** n_down)).to(device)
-                mel_mask = length_to_mask(mel_input_length).to(device)
                 text_mask = length_to_mask(input_lengths).to(texts.device)
-                
             try:
                 ppgs, s2s_pred, s2s_attn = model.text_aligner(mels, mask, texts)
                 s2s_attn = s2s_attn.transpose(-1, -2)
@@ -192,14 +225,7 @@ def main(config_path):
             d_gt = s2s_attn_mono.sum(axis=-1).detach()
 
             # compute the style of the entire utterance
-            # this operation cannot be done in batch because of the avgpool layer (may need to work on masked avgpool)
-            ss = []
-            for bib in range(len(mel_input_length)):
-                mel_length = int(mel_input_length[bib].item())
-                mel = mels[bib, :, :mel_input_length[bib]]
-                s = model.style_encoder(mel.unsqueeze(0).unsqueeze(1))
-                ss.append(s)
-            s = torch.stack(ss).squeeze()  # global prosodic styles
+            s = model.style_encoder(mels.unsqueeze(1))
 
             d, p = model.predictor(t_en, s, 
                                     input_lengths, 
@@ -232,19 +258,16 @@ def main(config_path):
             s = model.style_encoder(gt.unsqueeze(1))           
                 
             with torch.no_grad():
-                F0_real, _, F0 = model.pitch_extractor(gt.unsqueeze(1))
-                F0 = F0.reshape(F0.shape[0], F0.shape[1] * 2, F0.shape[2], 1).squeeze()
-
+                F0_real, _, _ = model.pitch_extractor(gt.unsqueeze(1))
                 N_real = log_norm(gt.unsqueeze(1)).squeeze(1)
-
                 wav = wav.unsqueeze(1)
 
             F0_fake, N_fake = model.predictor.F0Ntrain(p_en, s)
 
             y_rec = model.decoder(en, F0_fake, N_fake, s)
-
+            # ~~~~~
             F0_real = F0_real.view(batch_size, -1)
-
+            # ~~~~~
             loss_F0_rec =  (F.smooth_l1_loss(F0_real, F0_fake)) / 10
             loss_norm_rec = F.smooth_l1_loss(N_real, N_fake)
 
@@ -309,7 +332,7 @@ def main(config_path):
             iters = iters + 1
             
             if (i+1)%log_interval == 0:
-                logger.info ('Epoch [%d/%d], Step [%d/%d], Loss: %.5f, Disc Loss: %.5f, Dur Loss: %.5f, CE Loss: %.5f, Norm Loss: %.5f, F0 Loss: %.5f, Gen Loss: %.5f, S2S Loss: %.5f, Mono Loss: %.5f'
+                logger.info ('Epoch [%d/%d], Step [%d/%d], Mel Loss: %.5f, Disc Loss: %.5f, Dur Loss: %.5f, CE Loss: %.5f, Norm Loss: %.5f, F0 Loss: %.5f, Gen Loss: %.5f, S2S Loss: %.5f, Mono Loss: %.5f'
                     %(epoch+1, epochs, i+1, len(train_list)//batch_size, running_loss / log_interval, d_loss, loss_dur, loss_ce, loss_norm_rec, loss_F0_rec, loss_gen_all, loss_s2s, loss_mono))
                 
                 writer.add_scalar('train/mel_loss', running_loss / log_interval, iters)
@@ -324,7 +347,7 @@ def main(config_path):
                 
                 print('Time elasped:', time.time()-start_time)
 
-            if iters % 2000 == 0: # Save to current_model every 2000 iters
+            if iters % 1000 == 0: # Save to current_model every 2000 iters
                 state = {
                     'net':  {key: model[key].state_dict() for key in model}, 
                     'optimizer': optimizer.state_dict(),
@@ -339,7 +362,7 @@ def main(config_path):
 ############################################## EVAL ##############################################
 
 
-        print("Evaluating...")
+        print("\nEvaluating...")
         loss_test = 0
         loss_align = 0
         loss_f = 0
@@ -371,13 +394,8 @@ def main(config_path):
 
                         d_gt = s2s_attn_mono.sum(axis=-1).detach()
 
-                    ss = []
-                    for bib in range(len(mel_input_length)):
-                        mel_length = int(mel_input_length[bib].item())
-                        mel = mels[bib, :, :mel_input_length[bib]]
-                        s = model.style_encoder(mel.unsqueeze(0).unsqueeze(1))
-                        ss.append(s)
-                    s = torch.stack(ss).squeeze()  # global prosodic styles
+                    # compute the style of the entire utterance
+                    s = model.style_encoder(mels.unsqueeze(1))
 
                     d, p = model.predictor(t_en, s, 
                                             input_lengths, 
@@ -427,7 +445,7 @@ def main(config_path):
                     y_rec = model.decoder(en, F0_fake, N_fake, s)
                     loss_mel = stft_loss(y_rec.squeeze(), wav.detach())
 
-                    F0_real, _, F0 = model.pitch_extractor(gt.unsqueeze(1)) 
+                    F0_real, _, _ = model.pitch_extractor(gt.unsqueeze(1)) 
 
                     loss_F0 = F.l1_loss(F0_real, F0_fake) / 10
 
