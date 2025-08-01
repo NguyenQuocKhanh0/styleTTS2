@@ -244,15 +244,8 @@ def main(config_path):
                 random_start = np.random.randint(0, mel_length - mel_len)
                 en.append(asr[bib, :, random_start:random_start+mel_len])
                 p_en.append(p[bib, :, random_start:random_start+mel_len])
-                mel_slice = mels[bib, :, (random_start * 2):((random_start+mel_len) * 2)]
-                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                # padding nếu chưa đủ chiều
-                pad_len = mel_len * 2 - mel_slice.shape[-1]
-                if pad_len > 0:
-                    mel_slice = F.pad(mel_slice, (0, pad_len), mode='constant', value=0.)
-                gt.append(mel_slice)
-
-                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                gt.append(mels[bib, :, (random_start * 2):((random_start+mel_len) * 2)])
+                
                 y = waves[bib][(random_start * 2) * 300:((random_start+mel_len) * 2) * 300]
                 wav.append(torch.from_numpy(y).to(device))
                 
@@ -273,16 +266,7 @@ def main(config_path):
 
             y_rec = model.decoder(en, F0_fake, N_fake, s)
 
-            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            # Align F0_real to F0_fake
-            if F0_real.shape[1] != F0_fake.shape[1]:
-                min_len = min(F0_real.shape[1], F0_fake.shape[1])
-                F0_real = F0_real[:, :min_len]
-                F0_fake = F0_fake[:, :min_len]
-            
-            loss_F0_rec = F.smooth_l1_loss(F0_real, F0_fake) / 10
-            # loss_F0_rec =  (F.smooth_l1_loss(F0_real, F0_fake)) / 10
-            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            loss_F0_rec =  (F.smooth_l1_loss(F0_real, F0_fake)) / 10
             loss_norm_rec = F.smooth_l1_loss(N_real, N_fake)
 
             optimizer.zero_grad()
@@ -428,15 +412,7 @@ def main(config_path):
                         random_start = np.random.randint(0, mel_length - mel_len)
                         en.append(asr[bib, :, random_start:random_start+mel_len])
                         p_en.append(p[bib, :, random_start:random_start+mel_len])
-                        mel_slice = mels[bib, :, (random_start * 2):((random_start+mel_len) * 2)]
-                        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                        # padding nếu chưa đủ chiều
-                        pad_len = mel_len * 2 - mel_slice.shape[-1]
-                        if pad_len > 0:
-                            mel_slice = F.pad(mel_slice, (0, pad_len), mode='constant', value=0.)
-                        gt.append(mel_slice)
-                        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+                        gt.append(mels[bib, :, (random_start * 2):((random_start+mel_len) * 2)])
 
                         y = waves[bib][(random_start * 2) * 300:((random_start+mel_len) * 2) * 300]
                         wav.append(torch.from_numpy(y).to(device))
@@ -468,16 +444,9 @@ def main(config_path):
                     loss_mel = stft_loss(y_rec.squeeze(), wav.detach())
 
                     F0_real, _, _ = model.pitch_extractor(gt.unsqueeze(1)) 
-                    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                    # Align F0_real to F0_fake
-                    if F0_real.shape[1] != F0_fake.shape[1]:
-                        min_len = min(F0_real.shape[1], F0_fake.shape[1])
-                        F0_real = F0_real[:, :min_len]
-                        F0_fake = F0_fake[:, :min_len]
-                    
+
                     loss_F0 = F.l1_loss(F0_real, F0_fake) / 10
-                    # loss_F0 = F.l1_loss(F0_real, F0_fake) / 10
-                    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
                     loss_test += (loss_mel).mean()
                     loss_align += (loss_dur).mean()
                     loss_f += (loss_F0).mean()
