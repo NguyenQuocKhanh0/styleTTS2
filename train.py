@@ -244,8 +244,15 @@ def main(config_path):
                 random_start = np.random.randint(0, mel_length - mel_len)
                 en.append(asr[bib, :, random_start:random_start+mel_len])
                 p_en.append(p[bib, :, random_start:random_start+mel_len])
-                gt.append(mels[bib, :, (random_start * 2):((random_start+mel_len) * 2)])
-                
+                mel_slice = mels[bib, :, (random_start * 2):((random_start+mel_len) * 2)]
+                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                # padding nếu chưa đủ chiều
+                pad_len = mel_len * 2 - mel_slice.shape[-1]
+                if pad_len > 0:
+                    mel_slice = F.pad(mel_slice, (0, pad_len), mode='constant', value=0.)
+                gt.append(mel_slice)
+
+                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 y = waves[bib][(random_start * 2) * 300:((random_start+mel_len) * 2) * 300]
                 wav.append(torch.from_numpy(y).to(device))
                 
@@ -412,7 +419,15 @@ def main(config_path):
                         random_start = np.random.randint(0, mel_length - mel_len)
                         en.append(asr[bib, :, random_start:random_start+mel_len])
                         p_en.append(p[bib, :, random_start:random_start+mel_len])
-                        gt.append(mels[bib, :, (random_start * 2):((random_start+mel_len) * 2)])
+                        mel_slice = mels[bib, :, (random_start * 2):((random_start+mel_len) * 2)]
+                        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                        # padding nếu chưa đủ chiều
+                        pad_len = mel_len * 2 - mel_slice.shape[-1]
+                        if pad_len > 0:
+                            mel_slice = F.pad(mel_slice, (0, pad_len), mode='constant', value=0.)
+                        gt.append(mel_slice)
+                        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 
                         y = waves[bib][(random_start * 2) * 300:((random_start+mel_len) * 2) * 300]
                         wav.append(torch.from_numpy(y).to(device))
