@@ -5,7 +5,7 @@ device: cuda
 epochs: 50 
 batch_size: 2
 max_len: 310 # maximum number of frames
-pretrained_model: null
+pretrained_model: ./Models/Finetune/base_model.pth
 load_only_params: false # set to true if do not want to load epoch numbers and optimizer parameters
 debug: true
 
@@ -19,7 +19,7 @@ symbol: #Total 189 symbols
   punctuation: ';:,.!?¡¿—…"«»“” '
   letters: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
   letters_ipa: "ɑɐɒæɓʙβɔɕçɗɖðʤəɘɚɛɜɝɞɟʄɡɠɢʛɦɧħɥʜɨɪʝɭɬɫɮʟɱɯɰŋɳɲɴøɵɸθœɶʘɹɺɾɻʀʁɽʂʃʈʧʉʊʋⱱʌɣɤʍχʎʏʑʐʒʔʡʕʢǀǁǂǃˈˌːˑʼʴʰʱʲʷˠˤ˞↓↑→↗↘'̩'ᵻ"
-  extend: "∫̆ăη͡123456 ̪" #ADD MORE SYMBOLS HERE
+  extend: "∫̆ăη͡123456" #ADD MORE SYMBOLS HERE
 
 preprocess_params:
   sr: 24000
