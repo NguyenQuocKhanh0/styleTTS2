@@ -266,7 +266,7 @@ def main(config_path):
 
             y_rec = model.decoder(en, F0_fake, N_fake, s)
             # ~~~~~
-            F0_real = F0_real.view(batch_size, -1)
+            # F0_real = F0_real.view(batch_size, -1)
             # ~~~~~
             loss_F0_rec =  (F.smooth_l1_loss(F0_real, F0_fake)) / 10
             loss_norm_rec = F.smooth_l1_loss(N_real, N_fake)
