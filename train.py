@@ -199,8 +199,8 @@ def main(config_path):
             waves = batch[0]
             batch = [b.to(device) for b in batch[1:]]
             texts, input_lengths, mels, mel_input_length = batch
-            print(i)
-            print(texts)
+            # print(i)
+            # print(texts)
             with torch.no_grad():
                 mask = length_to_mask(mel_input_length // (2 ** n_down)).to(device)
                 text_mask = length_to_mask(input_lengths).to(texts.device)
