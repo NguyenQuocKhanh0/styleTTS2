@@ -147,7 +147,7 @@ def main(config_path):
     # adjust acoustic module learning rate
     for module in ["decoder", "style_encoder"]:
         for g in optimizer.optimizers[module].param_groups:
-            g['betas'] = (0.0, 0.99)
+            g['betas'] = (0.9, 0.999)
             g['lr'] = optimizer_params.ft_lr
             g['initial_lr'] = optimizer_params.ft_lr
             g['min_lr'] = 0
