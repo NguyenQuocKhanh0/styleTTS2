@@ -76,5 +76,5 @@ loss_params:
     lambda_ce: 20. # duration predictor probability output CE loss
 
 optimizer_params:
-  lr: 0.0001 # general learning rate
-  ft_lr: 0.00001 # learning rate for acoustic modules
+  lr: 0.00001 # general learning rate
+  ft_lr: 0.000001 # learning rate for acoustic modules
