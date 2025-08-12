@@ -349,16 +349,16 @@ def main(config_path):
                 
                 print('Time elasped:', time.time()-start_time)
 
-            if iters % 1000 == 0: # Save to current_model every 2000 iters
-                state = {
-                    'net':  {key: model[key].state_dict() for key in model}, 
-                    'optimizer': optimizer.state_dict(),
-                    'iters': iters,
-                    'val_loss': 0,
-                    'epoch': epoch,
-                }
-                save_path = os.path.join(log_dir, 'current_model.pth')
-                torch.save(state, save_path)  
+            # if iters % 1000 == 0: # Save to current_model every 2000 iters
+            #     state = {
+            #         'net':  {key: model[key].state_dict() for key in model}, 
+            #         'optimizer': optimizer.state_dict(),
+            #         'iters': iters,
+            #         'val_loss': 0,
+            #         'epoch': epoch,
+            #     }
+            #     save_path = os.path.join(log_dir, 'current_model.pth')
+            #     torch.save(state, save_path)  
 
 
 ############################################## EVAL ##############################################
