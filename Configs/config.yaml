@@ -30,7 +30,7 @@ preprocess_params:
 
 training_strats:
   #All modules: 'decoder', 'predictor', 'text_encoder', 'style_encoder', 'text_aligner', 'pitch_extractor', 'mpd', 'msd'
-  freeze_modules: [''] # Not updated when training.
+  freeze_modules: ['style_encoder'] # Not updated when training.
   ignore_modules: [''] # Not loading => fresh start. IMPORTANT: 'text_aligner' and 'pitch_extractor' are util pretraineds DO NOT ignore them.
 
 model_params:
