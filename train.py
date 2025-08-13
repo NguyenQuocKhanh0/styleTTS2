@@ -334,6 +334,11 @@ def main(config_path):
             iters = iters + 1
             
             if (i+1)%log_interval == 0:
+                lr_print = ''
+                for module_name, opt in optimizer.optimizers.items():
+                    for param_group in opt.param_groups:
+                        lr_print = lr_print + f"Module: {module_name}, LR: {param_group['lr']:.8f}|"
+                print(lr_print)
                 logger.info ('Epoch [%d/%d], Step [%d/%d], Mel Loss: %.5f, Disc Loss: %.5f, Dur Loss: %.5f, CE Loss: %.5f, Norm Loss: %.5f, F0 Loss: %.5f, Gen Loss: %.5f, S2S Loss: %.5f, Mono Loss: %.5f'
                     %(epoch+1, epochs, i+1, len(train_list)//batch_size, running_loss / log_interval, d_loss, loss_dur, loss_ce, loss_norm_rec, loss_F0_rec, loss_gen_all, loss_s2s, loss_mono))
                 
